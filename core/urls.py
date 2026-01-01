@@ -20,9 +20,11 @@ from rest_framework_simplejwt.views import (
     TokenObtainPairView,
     TokenRefreshView,
 )
+from api.views import api_home  
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('', api_home, name='api-home'),
     path('api/', include('api.urls')),
     
     # Authentication Endpoints (JWT)

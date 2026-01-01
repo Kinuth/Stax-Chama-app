@@ -26,7 +26,6 @@ SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'your-default-local-key')
 DEBUG = os.environ.get('DEBUG', 'False') == 'True'
 ALLOWED_HOSTS = ['.vercel.app', 'now.sh', 'localhost', '127.0.0.1']
 
-
 # Application definition
 
 INSTALLED_APPS = [
