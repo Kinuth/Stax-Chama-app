@@ -4,23 +4,11 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from .models import Loan, ChamaGroup
 from .serializers import LoanSerializer, UserSerializer, ChamaGroupSerializer   
-from django.http import JsonResponse
+
 from django.shortcuts import render
 
 def api_root(request):
     return render(request, 'index.html') # Ensure 'index.html' is in a 'templates' folder or correctly linked
-
-def api_home(request):
-    return JsonResponse({
-        "name": "Chama Loan API",
-        "version": "1.0",
-        "status": "Running",
-        "endpoints": {
-            "auth": "/api/token/",
-            "groups": "/api/groups/",
-            "loans": "/api/loans/"
-        }
-    })
 
 User = get_user_model()
 
