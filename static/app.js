@@ -1,61 +1,314 @@
 const API_BASE = window.location.origin + '/api';
+let currentGroupId = null;
+let actionModal;
 
-// 1. Handle Login
+// --- INITIALIZATION ---
+document.addEventListener('DOMContentLoaded', () => {
+    // 1. Initialize Bootstrap Modal
+    const modalElement = document.getElementById('actionModal');
+    if (modalElement) actionModal = new bootstrap.Modal(modalElement);
+    
+    // 2. Attach Listeners (using safe optional chaining ?)
+    document.getElementById('login-btn')?.addEventListener('click', login);
+    document.getElementById('register-btn')?.addEventListener('click', register); // Error was here
+    document.getElementById('logout-btn')?.addEventListener('click', logout);
+    document.getElementById('btn-create-chama')?.addEventListener('click', handleCreateChama);
+    document.getElementById('nav-dashboard')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        showDashboard();
+    });
+
+    // 3. Auto-load if logged in
+    if (localStorage.getItem('access_token')) {
+        showDashboard();
+    }
+});
+
+// --- AUTH FUNCTIONS ---
+
 async function login() {
     const username = document.getElementById('username').value;
     const password = document.getElementById('password').value;
-
-    const response = await fetch(`${API_BASE}/token/`, {
+    
+    const res = await fetch(`${API_BASE}/token/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password })
     });
 
-    if (response.ok) {
-        const data = await response.json();
+    if (res.ok) {
+        const data = await res.json();
         localStorage.setItem('access_token', data.access);
+        localStorage.setItem('username', username);
         showDashboard();
     } else {
-        alert("Login Failed. Check credentials.");
+        alert("Login failed.");
     }
 }
 
-// 2. Fetch and Display Groups
-async function loadGroups() {
+// THIS WAS LIKELY MISSING OR MISSPELLED
+async function register() {
+    const payload = {
+        username: document.getElementById('reg-username').value,
+        password: document.getElementById('reg-password').value,
+        phone_number: document.getElementById('reg-phone').value,
+        national_id: document.getElementById('reg-id').value
+    };
+
+    const res = await fetch(`${API_BASE}/register/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+
+    if (res.ok) {
+        alert("Registration success! You can now login.");
+        toggleAuth('login');
+    } else {
+        alert("Registration failed. Check if details are unique.");
+    }
+}
+
+// --- CHAMA LOGIC ---
+
+async function handleCreateChama() {
+    const name = prompt("Enter Chama Name:");
+    if (!name) return;
+
+    const res = await fetch(`${API_BASE}/groups/`, {
+        method: 'POST',
+        headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+        },
+        body: JSON.stringify({ name })
+    });
+
+    if (res.ok) {
+        alert("Chama created!");
+        loadSidebarChamas();
+    }
+}
+
+async function loadGroupView(groupId) {
+    currentGroupId = groupId;
     const token = localStorage.getItem('access_token');
-    const response = await fetch(`${API_BASE}/groups/`, {
+    
+    document.getElementById('page-title').innerText = "Chama Management";
+
+    const res = await fetch(`${API_BASE}/groups/${groupId}/summary/`, {
         headers: { 'Authorization': `Bearer ${token}` }
     });
 
-    if (response.ok) {
-        const groups = await response.json();
-        const container = document.getElementById('group-list');
-        container.innerHTML = groups.map(g => `
-            <div class="col-md-4">
-                <div class="card mb-3 shadow-sm">
-                    <div class="card-body">
-                        <h5 class="card-title">${g.name}</h5>
-                        <p class="card-text text-success">Balance: KES ${g.balance}</p>
-                        <button class="btn btn-sm btn-primary">Apply Loan</button>
+    if (res.ok) {
+        const data = await res.json();
+        const content = document.getElementById('dynamic-content');
+        
+        content.innerHTML = `
+            <div class="row g-4">
+                <div class="col-md-4">
+                    <div class="stat-card bg-primary text-white">
+                        <h6>Total Group Balance</h6>
+                        <h2 class="fw-bold">KES ${data.total_balance}</h2>
+                        <button class="btn btn-light btn-sm mt-2 w-100" onclick="handleContribution()">
+                            <i class="bi bi-plus-lg"></i> Add Contribution
+                        </button>
                     </div>
                 </div>
+
+                <div class="col-md-8">
+                    <div class="stat-card">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="fw-bold mb-0">Members</h5>
+                            <button class="btn btn-sm btn-banking" onclick="showInviteModal()">
+                                <i class="bi bi-person-plus"></i> Invite Member
+                            </button>
+                        </div>
+                        <ul class="list-group list-group-flush">
+                            ${data.members.map(m => `
+                                <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                                    <span><i class="bi bi-person-circle me-2 text-primary"></i>${m.username}</span>
+                                    <span class="text-muted small">${m.phone_number || 'Member'}</span>
+                                </li>
+                            `).join('')}
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="col-12">
+                    <div class="stat-card">
+                        <h5 class="fw-bold mb-3">Recent Contributions</h5>
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Member</th>
+                                        <th>Amount</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="contribution-list">
+                                    <tr><td colspan="3" class="text-center text-muted py-3">No recent contributions</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12">
+                    <div class="stat-card">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="fw-bold mb-0">Loan Requests</h5>
+                            <button class="btn btn-sm btn-outline-primary" onclick="handleRequestLoan()">
+                                <i class="bi bi-cash-stack"></i> Request Loan
+                            </button>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table align-middle">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Borrower</th>
+                                        <th>Amount</th>
+                                        <th>Total Due</th>
+                                        <th>Status</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="loan-list-table">
+                                    </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        // Fetch loans and refresh UI
+        fetchGroupLoans(groupId);
+    }
+}
+
+async function loadSidebarChamas() {
+    const token = localStorage.getItem('access_token');
+    const res = await fetch(`${API_BASE}/groups/`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+    });
+
+    if (res.ok) {
+        const groups = await res.json();
+        console.log("Groups Found Count:", groups.length);
+        console.table(groups); // This will show your chamas in a nice table in the console
+
+        const container = document.getElementById('chama-list-sidebar');
+        if (!container) {
+            console.error("CRITICAL: Element #chama-list-sidebar was not found in the HTML.");
+            return;
+        }
+
+        // Force display
+        container.innerHTML = groups.map(g => `
+            <div class="nav-item">
+                <a class="nav-link-custom ps-4" onclick="loadGroupView(${g.id}, 'members')">
+                    <i class="bi bi-bank"></i> ${g.name}
+                </a>
             </div>
         `).join('');
     }
 }
 
 function showDashboard() {
-    document.getElementById('login-section').style.display = 'none';
-    document.getElementById('dashboard-section').style.display = 'block';
-    loadGroups();
+    document.getElementById('auth-section').style.display = 'none';
+    document.getElementById('dashboard-ui').style.display = 'block';
+    document.getElementById('display-name').innerText = `Hi, ${localStorage.getItem('username')}`;
+    loadSidebarChamas();
 }
 
 function logout() {
     localStorage.clear();
-    location.reload();
+    window.location.reload();
 }
 
-// Auto-login if token exists
-if (localStorage.getItem('access_token')) {
-    showDashboard();
+// Fetch loans specifically for this group
+async function fetchGroupLoans(groupId) {
+    const res = await fetch(`${API_BASE}/loans/`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('access_token')}` }
+    });
+    if (res.ok) {
+        const loans = await res.json();
+        const groupLoans = loans.filter(l => l.group == groupId); // Filter for this Chama
+        const tableBody = document.getElementById('loan-list-table');
+        
+        tableBody.innerHTML = groupLoans.length ? groupLoans.map(l => `
+            <tr>
+                <td>User ID: ${l.borrower}</td>
+                <td class="fw-bold">KES ${l.amount}</td>
+                <td>KES ${l.total_to_pay}</td>
+                <td><span class="badge ${l.status === 'APPROVED' ? 'bg-success' : 'bg-warning'}">${l.status}</span></td>
+                <td>
+                    ${l.status === 'PENDING' ? `<button class="btn btn-sm btn-success" onclick="approveLoan(${l.id})">Approve</button>` : 'N/A'}
+                </td>
+            </tr>
+        `).join('') : '<tr><td colspan="5" class="text-center">No loans found</td></tr>';
+    }
+}
+
+// Logic for a member to request a loan
+// Function to handle contributions (Mocked for now as we'd need a Contribution model/viewset)
+async function handleContribution() {
+    const amount = prompt("Enter contribution amount (KES):");
+    if (!amount || isNaN(amount)) return;
+
+    alert(`Submitting contribution of KES ${amount}...`);
+    // Logic: POST to /api/contributions/ then refresh view
+    loadGroupView(currentGroupId);
+}
+
+// Function to fetch and display loans for the specific group
+async function fetchGroupLoans(groupId) {
+    const res = await fetch(`${API_BASE}/loans/`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('access_token')}` }
+    });
+    
+    if (res.ok) {
+        const loans = await res.json();
+        const groupLoans = loans.filter(l => l.group == groupId);
+        const tableBody = document.getElementById('loan-list-table');
+        
+        tableBody.innerHTML = groupLoans.length ? groupLoans.map(l => `
+            <tr>
+                <td><i class="bi bi-person me-2"></i>User ${l.borrower}</td>
+                <td>KES ${l.amount}</td>
+                <td>${l.interest_rate}%</td>
+                <td class="fw-bold">KES ${l.total_to_pay}</td>
+                <td>
+                    <span class="badge ${l.status === 'APPROVED' ? 'bg-success' : 'bg-warning text-dark'}">
+                        ${l.status}
+                    </span>
+                </td>
+                <td>
+                    ${l.status === 'PENDING' ? 
+                        `<button class="btn btn-sm btn-success py-0" onclick="approveLoan(${l.id})">Approve</button>` : 
+                        `<i class="bi bi-check-all text-success"></i>`
+                    }
+                </td>
+            </tr>
+        `).join('') : '<tr><td colspan="6" class="text-center py-4">No loan requests found</td></tr>';
+    }
+}
+
+// Function to approve a loan using your PATCH action in views.py
+async function approveLoan(loanId) {
+    if (!confirm("Are you sure you want to approve and disburse this loan?")) return;
+
+    const res = await fetch(`${API_BASE}/loans/${loanId}/approve/`, {
+        method: 'PATCH',
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('access_token')}` }
+    });
+
+    if (res.ok) {
+        alert("Loan Approved! Funds have been deducted from the group balance.");
+        loadGroupView(currentGroupId);
+    } else {
+        const err = await res.json();
+        alert("Error: " + (err.error || "Could not approve loan"));
+    }
 }
