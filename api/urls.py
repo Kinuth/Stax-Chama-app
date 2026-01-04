@@ -1,11 +1,12 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import LoanViewSet, UserViewSet, ChamaGroupViewSet, RegisterView, DashboardAnalyticsView
+from .views import LoanViewSet, UserViewSet, ChamaGroupViewSet, RegisterView, DashboardAnalyticsView, ContributionViewSet
 
 
 # Create a router and register our viewsets with it.
 router = DefaultRouter()
 router.register(r'users', UserViewSet, basename='user')
+router.register(r'contributions', ContributionViewSet, basename='contribution')
 router.register(r'groups', ChamaGroupViewSet, basename='group')
 router.register(r'loans', LoanViewSet, basename='loan')
 

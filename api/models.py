@@ -2,12 +2,20 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser, Group, Permission
 from django.conf import settings
 
+
 class User(AbstractUser):
     phone_number = models.CharField(max_length=15, unique=True)
     national_id = models.CharField(max_length=20, unique=True)
 
-from django.db import models
-from django.conf import settings
+    @classmethod
+    def create_user(cls, username, password=None, **extra_fields):
+        if not username:
+            raise ValueError('The Username must be set')
+        user = cls(username=username, **extra_fields)
+        user.set_password(password)
+        user.save()
+        return user
+
 
 class ChamaGroup(models.Model):
     name = models.CharField(max_length=100)

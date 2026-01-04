@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from .models import User, ChamaGroup, Loan
+from .models import User, ChamaGroup, Loan, Contribution
 
 User = get_user_model()
 
@@ -33,8 +33,25 @@ class ChamaGroupSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'balance', 'chairman']
         read_only_fields = ['balance', 'chairman'] # User only sends 'name'
 
+class ContributionSerializer(serializers.ModelSerializer):
+    # This allows the frontend to show "John Doe" instead of "User ID: 5"
+    member_name = serializers.ReadOnlyField(source='member.username')
+    group_name = serializers.ReadOnlyField(source='group.name')
+
+    class Meta:
+        model = Contribution
+        fields = ['id', 'group', 'group_name', 'member', 'member_name', 'amount', 'date']
+        # Member is read-only because we set it automatically in the Viewset
+        read_only_fields = ['member', 'date']
+
+    def validate_amount(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("Contribution amount must be greater than zero.")
+        return value
+
 class LoanSerializer(serializers.ModelSerializer):
     total_to_pay = serializers.ReadOnlyField(source='total_repayment')
     class Meta:
         model = Loan
         fields = ['id', 'borrower', 'group', 'amount', 'interest_rate', 'status', 'total_to_pay']
+        read_only_fields = ['borrower', 'status']
