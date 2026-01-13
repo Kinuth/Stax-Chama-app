@@ -118,18 +118,26 @@ async function handleCreateChama() {
     const name = prompt("Enter Chama Name:");
     if (!name) return;
 
-    const res = await fetch(`${API_BASE}/groups/`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-        },
-        body: JSON.stringify({ name })
-    });
+    try {
+        const res = await fetch(`${API_BASE}/groups/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+            },
+            body: JSON.stringify({ name })
+        });
 
-    if (res.ok) {
-        alert("Chama created!");
-        loadSidebarChamas();
+        if (res.ok) {
+            alert("Chama created!");
+            loadSidebarChamas();
+        } else {
+            const err = await res.json();
+            alert("Failed to create Chama: " + (err.detail || JSON.stringify(err)));
+        }
+    } catch (e) {
+        console.error("Error creating chama:", e);
+        alert("An error occurred while creating the Chama. Please try again.");
     }
 }
 
@@ -140,15 +148,16 @@ async function loadGroupView(groupId) {
 
     document.getElementById('page-title').innerText = "Chama Management";
 
-    const res = await fetch(`${API_BASE}/groups/${groupId}/summary/`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-    });
+    try {
+        const res = await fetch(`${API_BASE}/groups/${groupId}/summary/`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
 
-    if (res.ok) {
-        const data = await res.json();
-        const content = document.getElementById('dynamic-content');
+        if (res.ok) {
+            const data = await res.json();
+            const content = document.getElementById('dynamic-content');
 
-        content.innerHTML = `
+            content.innerHTML = `
             <div class="row g-4">
                 <div class="col-md-4">
                     <div class="stat-card bg-primary text-white">
@@ -172,7 +181,6 @@ async function loadGroupView(groupId) {
                             ${data.members.map(m => `
                                 <li class="list-group-item d-flex justify-content-between align-items-center px-0">
                                     <span><i class="bi bi-person-circle me-2 text-primary"></i>${m.username} ${!m.is_approved ? '(Pending Approval)' : ''}</span>
-                        <span class="text-muted small">${m.phone_number || 'Member'}</span>
                                     <span class="text-muted small">${m.phone_number || 'Member'}</span>
                                 </li>
                             `).join('')}
@@ -227,37 +235,50 @@ async function loadGroupView(groupId) {
                 </div>
             </div>
         `;
-        // Fetch loans and refresh UI
-        fetchGroupLoans(groupId);
-        fetchGroupContributions(groupId);
+            // Fetch loans and refresh UI
+            fetchGroupLoans(groupId);
+            fetchGroupContributions(groupId);
+        } else {
+            const err = await res.json();
+            alert("Failed to load group details: " + (err.detail || JSON.stringify(err)));
+        }
+    } catch (e) {
+        console.error("Error loading group:", e);
+        alert("An error occurred while loading the group. Please check your connection.");
     }
 }
 
 async function loadSidebarChamas() {
     const token = localStorage.getItem('access_token');
-    const res = await fetch(`${API_BASE}/groups/`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-    });
+    try {
+        const res = await fetch(`${API_BASE}/groups/`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
 
-    if (res.ok) {
-        const groups = await res.json();
-        console.log("Groups Found Count:", groups.length);
-        console.table(groups); // This will show your chamas in a nice table in the console
+        if (res.ok) {
+            const groups = await res.json();
+            console.log("Groups Found Count:", groups.length);
+            console.table(groups); // This will show your chamas in a nice table in the console
 
-        const container = document.getElementById('chama-list-sidebar');
-        if (!container) {
-            console.error("CRITICAL: Element #chama-list-sidebar was not found in the HTML.");
-            return;
+            const container = document.getElementById('chama-list-sidebar');
+            if (!container) {
+                console.error("CRITICAL: Element #chama-list-sidebar was not found in the HTML.");
+                return;
+            }
+
+            // Force display
+            container.innerHTML = groups.map(g => `
+                <div class="nav-item">
+                    <a class="nav-link-custom ps-4" onclick="loadGroupView(${g.id})">
+                        <i class="bi bi-bank"></i> ${g.name}
+                    </a>
+                </div>
+            `).join('');
+        } else {
+            console.error("Failed to load groups:", res.status);
         }
-
-        // Force display
-        container.innerHTML = groups.map(g => `
-            <div class="nav-item">
-                <a class="nav-link-custom ps-4" onclick="loadGroupView(${g.id}, 'members')">
-                    <i class="bi bi-bank"></i> ${g.name}
-                </a>
-            </div>
-        `).join('');
+    } catch (e) {
+        console.error("Error loading sidebar chamas:", e);
     }
 }
 
@@ -284,20 +305,26 @@ function showInviteModal() {
 
 // Function to fetch and display contributions for the group
 async function fetchGroupContributions(groupId) {
-    const res = await fetch(`${API_BASE}/contributions/`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('access_token')}` }
-    });
-    if (res.ok) {
-        const contributions = await res.json();
-        const groupContributions = contributions.filter(c => c.group == groupId);
-        const tableBody = document.getElementById('contribution-list');
-        tableBody.innerHTML = groupContributions.length ? groupContributions.map(c => `
-            <tr>
-                <td>${c.member_name}</td>
-                <td>KES ${c.amount}</td>
-                <td>Completed</td>  <!-- Assuming all contributions are completed; adjust if needed -->
-            </tr>
-        `).join('') : '<tr><td colspan="3" class="text-center text-muted py-3">No recent contributions</td></tr>';
+    try {
+        const res = await fetch(`${API_BASE}/contributions/`, {
+            headers: { 'Authorization': `Bearer ${localStorage.getItem('access_token')}` }
+        });
+        if (res.ok) {
+            const contributions = await res.json();
+            const groupContributions = contributions.filter(c => c.group == groupId);
+            const tableBody = document.getElementById('contribution-list');
+            if (tableBody) {
+                tableBody.innerHTML = groupContributions.length ? groupContributions.map(c => `
+                    <tr>
+                        <td>${c.member_name}</td>
+                        <td>KES ${c.amount}</td>
+                        <td>Completed</td>  <!-- Assuming all contributions are completed; adjust if needed -->
+                    </tr>
+                `).join('') : '<tr><td colspan="3" class="text-center text-muted py-3">No recent contributions</td></tr>';
+            }
+        }
+    } catch (e) {
+        console.error("Error loading contributions:", e);
     }
 }
 
@@ -312,22 +339,29 @@ async function handleContribution() {
     if (!amount || isNaN(amount)) return;
 
     console.log("Posting contribution:", { group: currentGroupId, amount: parseFloat(amount) });  // Debug log
-    const res = await fetch(`${API_BASE}/contributions/`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-        },
-        body: JSON.stringify({ group: currentGroupId, amount: parseFloat(amount) })
-    });
 
-    if (res.ok) {
-        alert("Contribution added!");
-        loadGroupView(currentGroupId);  // Refresh UI
-    } else {
-        const error = await res.json();
-        console.error("Contribution failed:", error);  // Debug log
-        alert("Failed to add contribution: " + (error.detail || "Unknown error"));
+
+    try {
+        const res = await fetch(`${API_BASE}/contributions/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+            },
+            body: JSON.stringify({ group: currentGroupId, amount: parseFloat(amount) })
+        });
+
+        if (res.ok) {
+            alert("Contribution added!");
+            loadGroupView(currentGroupId);  // Refresh UI
+        } else {
+            const error = await res.json();
+            console.error("Contribution failed:", error);  // Debug log
+            alert("Failed to add contribution: " + (error.detail || JSON.stringify(error)));
+        }
+    } catch (e) {
+        console.error("Error adding contribution:", e);
+        alert("An error occurred. check connectivity.");
     }
 }
 
@@ -341,55 +375,68 @@ async function handleRequestLoan() {
     if (!amount || isNaN(amount)) return;
 
     console.log("Posting loan:", { group: currentGroupId, amount: parseFloat(amount) });  // Debug log
-    const res = await fetch(`${API_BASE}/loans/`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-        },
-        body: JSON.stringify({ group: currentGroupId, amount: parseFloat(amount) })
-    });
 
-    if (res.ok) {
-        alert("Loan request submitted!");
-        fetchGroupLoans(currentGroupId);  // Refresh loans table
-    } else {
-        const error = await res.json();
-        console.error("Loan request failed:", error);  // Debug log
-        alert("Failed to request loan: " + (error.detail || "Unknown error"));
+
+    try {
+        const res = await fetch(`${API_BASE}/loans/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+            },
+            body: JSON.stringify({ group: currentGroupId, amount: parseFloat(amount) })
+        });
+
+        if (res.ok) {
+            alert("Loan request submitted!");
+            fetchGroupLoans(currentGroupId);  // Refresh loans table
+        } else {
+            const error = await res.json();
+            console.error("Loan request failed:", error);  // Debug log
+            alert("Failed to request loan: " + (error.detail || JSON.stringify(error)));
+        }
+    } catch (e) {
+        console.error("Error requesting loan:", e);
+        alert("Network error.");
     }
 }
 
 // Function to fetch and display loans for the specific group
 async function fetchGroupLoans(groupId) {
-    const res = await fetch(`${API_BASE}/loans/`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('access_token')}` }
-    });
+    try {
+        const res = await fetch(`${API_BASE}/loans/`, {
+            headers: { 'Authorization': `Bearer ${localStorage.getItem('access_token')}` }
+        });
 
-    if (res.ok) {
-        const loans = await res.json();
-        const groupLoans = loans.filter(l => l.group == groupId);
-        const tableBody = document.getElementById('loan-list-table');
+        if (res.ok) {
+            const loans = await res.json();
+            const groupLoans = loans.filter(l => l.group == groupId);
+            const tableBody = document.getElementById('loan-list-table');
 
-        tableBody.innerHTML = groupLoans.length ? groupLoans.map(l => `
-            <tr>
-                <td><i class="bi bi-person me-2"></i>User ${l.borrower}</td>
-                <td>KES ${l.amount}</td>
-                <td>${l.interest_rate}%</td>
-                <td class="fw-bold">KES ${l.total_to_pay}</td>
-                <td>
-                    <span class="badge ${l.status === 'APPROVED' ? 'bg-success' : 'bg-warning text-dark'}">
-                        ${l.status}
-                    </span>
-                </td>
-                <td>
-                    ${l.status === 'PENDING' ?
-                `<button class="btn btn-sm btn-success py-0" onclick="approveLoan(${l.id})">Approve</button>` :
-                `<i class="bi bi-check-all text-success"></i>`
+            if (tableBody) {
+                tableBody.innerHTML = groupLoans.length ? groupLoans.map(l => `
+                    <tr>
+                        <td><i class="bi bi-person me-2"></i>User ${l.borrower}</td>
+                        <td>KES ${l.amount}</td>
+                        <td>${l.interest_rate}%</td>
+                        <td class="fw-bold">KES ${l.total_to_pay}</td>
+                        <td>
+                            <span class="badge ${l.status === 'APPROVED' ? 'bg-success' : 'bg-warning text-dark'}">
+                                ${l.status}
+                            </span>
+                        </td>
+                        <td>
+                            ${l.status === 'PENDING' ?
+                        `<button class="btn btn-sm btn-success py-0" onclick="approveLoan(${l.id})">Approve</button>` :
+                        `<i class="bi bi-check-all text-success"></i>`
+                    }
+                        </td>
+                    </tr>
+                `).join('') : '<tr><td colspan="6" class="text-center py-4">No loan requests found</td></tr>';
             }
-                </td>
-            </tr>
-        `).join('') : '<tr><td colspan="6" class="text-center py-4">No loan requests found</td></tr>';
+        }
+    } catch (e) {
+        console.error("Error loading loans:", e);
     }
 }
 
@@ -397,17 +444,22 @@ async function fetchGroupLoans(groupId) {
 async function approveLoan(loanId) {
     if (!confirm("Are you sure you want to approve and disburse this loan?")) return;
 
-    const res = await fetch(`${API_BASE}/loans/${loanId}/approve/`, {
-        method: 'PATCH',
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('access_token')}` }
-    });
+    try {
+        const res = await fetch(`${API_BASE}/loans/${loanId}/approve/`, {
+            method: 'PATCH',
+            headers: { 'Authorization': `Bearer ${localStorage.getItem('access_token')}` }
+        });
 
-    if (res.ok) {
-        alert("Loan Approved! Funds have been deducted from the group balance.");
-        loadGroupView(currentGroupId);
-    } else {
-        const err = await res.json();
-        alert("Error: " + (err.error || "Could not approve loan"));
+        if (res.ok) {
+            alert("Loan Approved! Funds have been deducted from the group balance.");
+            loadGroupView(currentGroupId);
+        } else {
+            const err = await res.json();
+            alert("Error: " + (err.error || "Could not approve loan"));
+        }
+    } catch (e) {
+        console.error("Error approving loan:", e);
+        alert("An error occurred while approving the loan.");
     }
 }
 
