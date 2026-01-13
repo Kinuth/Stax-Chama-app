@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // 1. Initialize Bootstrap Modal
     const modalElement = document.getElementById('actionModal');
     if (modalElement) actionModal = new bootstrap.Modal(modalElement);
-    
+
     // 2. Attach Listeners (using safe optional chaining ?)
     document.getElementById('tab-login')?.addEventListener('click', () => toggleAuth('login'));
     document.getElementById('tab-register')?.addEventListener('click', () => toggleAuth('register'));
@@ -33,7 +33,7 @@ document.addEventListener('DOMContentLoaded', () => {
 async function login() {
     const username = document.getElementById('username').value;
     const password = document.getElementById('password').value;
-    
+
     const res = await fetch(`${API_BASE}/token/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -46,7 +46,17 @@ async function login() {
         localStorage.setItem('username', username);
         showDashboard();
     } else {
-        alert("Login failed.");
+        let errorMsg;
+        try {
+            const errorData = await res.json();
+            errorMsg = JSON.stringify(errorData);
+        } catch (e) {
+            // If response is not JSON (e.g. 500 HTML page), get text
+            errorMsg = await res.text();
+            // Optional: Truncate if too long (e.g. full HTML page)
+            if (errorMsg.length > 200) errorMsg = errorMsg.substring(0, 200) + "...";
+        }
+        alert(`Login failed: ${res.status} ${res.statusText}\n${errorMsg}`);
     }
 }
 
@@ -56,7 +66,7 @@ function toggleAuth(mode) {
     const registerTab = document.getElementById('tab-register');
     const loginForm = document.getElementById('login-form');
     const registerForm = document.getElementById('register-form');
-    
+
     if (mode === 'login') {
         loginTab.classList.add('active');
         registerTab.classList.remove('active');
@@ -64,7 +74,7 @@ function toggleAuth(mode) {
         registerForm.style.display = 'none';
     } else {
         registerTab.classList.add('active');
-                loginTab.classList.remove('active');
+        loginTab.classList.remove('active');
         registerForm.style.display = 'block';
         loginForm.style.display = 'none';
     }
@@ -90,7 +100,15 @@ async function register() {
         alert("Registration success! You can now login.");
         toggleAuth('login');
     } else {
-        alert("Registration failed. Check if details are unique.");
+        let errorMsg;
+        try {
+            const errorData = await res.json();
+            errorMsg = JSON.stringify(errorData);
+        } catch (e) {
+            errorMsg = await res.text();
+            if (errorMsg.length > 500) errorMsg = errorMsg.substring(0, 500) + "..."; // Longer limit for reg errors
+        }
+        alert(`Registration failed: ${res.status} ${res.statusText}\n${errorMsg}`);
     }
 }
 
@@ -102,7 +120,7 @@ async function handleCreateChama() {
 
     const res = await fetch(`${API_BASE}/groups/`, {
         method: 'POST',
-        headers: { 
+        headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${localStorage.getItem('access_token')}`
         },
@@ -119,7 +137,7 @@ async function loadGroupView(groupId) {
     currentGroupId = groupId;
     console.log("loadGroupView called with groupId:", groupId);  // Debug log
     const token = localStorage.getItem('access_token');
-    
+
     document.getElementById('page-title').innerText = "Chama Management";
 
     const res = await fetch(`${API_BASE}/groups/${groupId}/summary/`, {
@@ -129,7 +147,7 @@ async function loadGroupView(groupId) {
     if (res.ok) {
         const data = await res.json();
         const content = document.getElementById('dynamic-content');
-        
+
         content.innerHTML = `
             <div class="row g-4">
                 <div class="col-md-4">
@@ -347,12 +365,12 @@ async function fetchGroupLoans(groupId) {
     const res = await fetch(`${API_BASE}/loans/`, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('access_token')}` }
     });
-    
+
     if (res.ok) {
         const loans = await res.json();
         const groupLoans = loans.filter(l => l.group == groupId);
         const tableBody = document.getElementById('loan-list-table');
-        
+
         tableBody.innerHTML = groupLoans.length ? groupLoans.map(l => `
             <tr>
                 <td><i class="bi bi-person me-2"></i>User ${l.borrower}</td>
@@ -365,10 +383,10 @@ async function fetchGroupLoans(groupId) {
                     </span>
                 </td>
                 <td>
-                    ${l.status === 'PENDING' ? 
-                        `<button class="btn btn-sm btn-success py-0" onclick="approveLoan(${l.id})">Approve</button>` : 
-                        `<i class="bi bi-check-all text-success"></i>`
-                    }
+                    ${l.status === 'PENDING' ?
+                `<button class="btn btn-sm btn-success py-0" onclick="approveLoan(${l.id})">Approve</button>` :
+                `<i class="bi bi-check-all text-success"></i>`
+            }
                 </td>
             </tr>
         `).join('') : '<tr><td colspan="6" class="text-center py-4">No loan requests found</td></tr>';
@@ -411,7 +429,7 @@ async function handleInvite() {
         alert("Invite sent!");
         actionModal.hide();
         loadGroupView(currentGroupId); // Refresh UI
-     } else {
+    } else {
         const error = await res.json();
         alert("Failed to send invite: " + (error.error || "Unknown error"));
     }

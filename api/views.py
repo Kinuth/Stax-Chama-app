@@ -1,4 +1,5 @@
 from rest_framework import viewsets, status, permissions
+from django.core.management import call_command
 from django.contrib.auth import get_user_model
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -106,6 +107,8 @@ class ChamaGroupViewSet(viewsets.ModelViewSet):
 class ContributionViewSet(viewsets.ModelViewSet):
     queryset = Contribution.objects.all()
     serializer_class = ContributionSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    authentication_classes = [JWTAuthentication]
 
     def get_queryset(self):
         # Filter to only contributions for groups the user is a member/chairman of
@@ -127,6 +130,7 @@ class LoanViewSet(viewsets.ModelViewSet):
     queryset = Loan.objects.all()
     serializer_class = LoanSerializer
     permission_classes = [permissions.IsAuthenticated]
+    authentication_classes = [JWTAuthentication]
 
     def get_queryset(self):
         # Filter to only loans for groups the user is a member/chairman of
@@ -186,3 +190,11 @@ class DashboardAnalyticsView(APIView):
             "monthly_trends": list(monthly_stats),
             "recent_transactions": transactions
         })
+
+@action(methods=['get'], detail=False, permission_classes=[AllowAny])
+def migrate_db(request):
+    try:
+        call_command('migrate', interactive=False)
+        return HttpResponse("Migration successful", status=200)
+    except Exception as e:
+        return HttpResponse(f"Migration failed: {str(e)}", status=500)
